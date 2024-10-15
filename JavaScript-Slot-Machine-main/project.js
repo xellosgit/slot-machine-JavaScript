@@ -1,154 +1,87 @@
-// 1. Despot some money
-// 2. Determine number of lines to bet on
-// 3. Collect a bet amount
-// 4. Spin the slot machine
-// 5. check if the user won
-// 6. give the user their winnings
-// 7. play again
-
 const prompt = require("prompt-sync")();
 
 const ROWS = 3;
 const COLS = 3;
 
-const SYMBOLS_COUNT = {
-  A: 2,
-  B: 4,
-  C: 6,
-  D: 8,
-};
+const SYMBOLS_COUNT = { A: 2, B: 4, C: 6, D: 8 };
+const SYMBOL_VALUES = { A: 5, B: 4, C: 3, D: 2 };
 
-const SYMBOL_VALUES = {
-  A: 5,
-  B: 4,
-  C: 3,
-  D: 2,
-};
-
-const deposit = () => {
+// === Введення даних з валідацією ===
+const promptValidatedNumber = (message, condition) => {
   while (true) {
-    const depositAmount = prompt("Enter a deposit amount: ");
-    const numberDepositAmount = parseFloat(depositAmount);
-
-    if (isNaN(numberDepositAmount) || numberDepositAmount <= 0) {
-      console.log("Invalid deposit amount, try again.");
-    } else {
-      return numberDepositAmount;
-    }
+    const input = parseFloat(prompt(message));
+    if (!isNaN(input) && condition(input)) return input;
+    console.log("Invalid input, try again.");
   }
 };
 
-const getNumberOfLines = () => {
-  while (true) {
-    const lines = prompt("Enter the number of lines to bet on (1-3): ");
-    const numberOfLines = parseFloat(lines);
+const deposit = () =>
+  promptValidatedNumber("Enter a deposit amount: ", (amount) => amount > 0);
 
-    if (isNaN(numberOfLines) || numberOfLines <= 0 || numberOfLines > 3) {
-      console.log("Invalid number of lines, try again.");
-    } else {
-      return numberOfLines;
-    }
-  }
-};
+const getNumberOfLines = () =>
+  promptValidatedNumber(
+    "Enter the number of lines to bet on (1-3): ",
+    (lines) => lines >= 1 && lines <= 3
+  );
 
-const getBet = (balance, lines) => {
-  while (true) {
-    const bet = prompt("Enter the bet per line: ");
-    const numberBet = parseFloat(bet);
+const getBet = (balance, lines) =>
+  promptValidatedNumber(
+    "Enter the bet per line: ",
+    (bet) => bet > 0 && bet <= balance / lines
+  );
 
-    if (isNaN(numberBet) || numberBet <= 0 || numberBet > balance / lines) {
-      console.log("Invalid bet, try again.");
-    } else {
-      return numberBet;
-    }
-  }
-};
+// === Генерація ігрових даних ===
+const generateSymbols = () =>
+  Object.entries(SYMBOLS_COUNT).flatMap(([symbol, count]) =>
+    Array(count).fill(symbol)
+  );
 
-const spin = () => {
-  const symbols = [];
-  for (const [symbol, count] of Object.entries(SYMBOLS_COUNT)) {
-    for (let i = 0; i < count; i++) {
-      symbols.push(symbol);
-    }
-  }
-
-  const reels = [];
-  for (let i = 0; i < COLS; i++) {
-    reels.push([]);
+const spinReels = () => {
+  const symbols = generateSymbols();
+  return Array.from({ length: COLS }, () => {
     const reelSymbols = [...symbols];
-    for (let j = 0; j < ROWS; j++) {
-      const randomIndex = Math.floor(Math.random() * reelSymbols.length);
-      const selectedSymbol = reelSymbols[randomIndex];
-      reels[i].push(selectedSymbol);
-      reelSymbols.splice(randomIndex, 1);
-    }
-  }
-
-  return reels;
+    return Array.from({ length: ROWS }, () => {
+      const idx = Math.floor(Math.random() * reelSymbols.length);
+      return reelSymbols.splice(idx, 1)[0];
+    });
+  });
 };
 
-const transpose = (reels) => {
-  const rows = [];
+const transpose = (reels) =>
+  Array.from({ length: ROWS }, (_, i) => reels.map((reel) => reel[i]));
 
-  for (let i = 0; i < ROWS; i++) {
-    rows.push([]);
-    for (let j = 0; j < COLS; j++) {
-      rows[i].push(reels[j][i]);
-    }
-  }
+// === Вивід та підрахунок виграшів ===
+const printRows = (rows) => rows.forEach((row) => console.log(row.join(" | ")));
 
-  return rows;
-};
+const calculateWinnings = (rows, bet, lines) =>
+  rows
+    .slice(0, lines)
+    .reduce(
+      (total, row) =>
+        row.every((symbol) => symbol === row[0])
+          ? total + bet * SYMBOL_VALUES[row[0]]
+          : total,
+      0
+    );
 
-const printRows = (rows) => {
-  for (const row of rows) {
-    let rowString = "";
-    for (const [i, symbol] of row.entries()) {
-      rowString += symbol;
-      if (i != row.length - 1) {
-        rowString += " | ";
-      }
-    }
-    console.log(rowString);
-  }
-};
-
-const getWinnings = (rows, bet, lines) => {
-  let winnings = 0;
-
-  for (let row = 0; row < lines; row++) {
-    const symbols = rows[row];
-    let allSame = true;
-
-    for (const symbol of symbols) {
-      if (symbol != symbols[0]) {
-        allSame = false;
-        break;
-      }
-    }
-
-    if (allSame) {
-      winnings += bet * SYMBOL_VALUES[symbols[0]];
-    }
-  }
-
-  return winnings;
-};
-
+// === Основна логіка гри ===
 const game = () => {
   let balance = deposit();
 
-  while (true) {
-    console.log("You have a balance of $" + balance);
-    const numberOfLines = getNumberOfLines();
-    const bet = getBet(balance, numberOfLines);
-    balance -= bet * numberOfLines;
-    const reels = spin();
+  while (balance > 0) {
+    console.log(`You have a balance of $${balance}`);
+    const lines = getNumberOfLines();
+    const bet = getBet(balance, lines);
+
+    balance -= bet * lines;
+    const reels = spinReels();
     const rows = transpose(reels);
+
     printRows(rows);
-    const winnings = getWinnings(rows, bet, numberOfLines);
+    const winnings = calculateWinnings(rows, bet, lines);
+
     balance += winnings;
-    console.log("You won, $" + winnings.toString());
+    console.log(`You won $${winnings}`);
 
     if (balance <= 0) {
       console.log("You ran out of money!");
@@ -156,8 +89,7 @@ const game = () => {
     }
 
     const playAgain = prompt("Do you want to play again (y/n)? ");
-
-    if (playAgain != "y") break;
+    if (playAgain.toLowerCase() !== "y") break;
   }
 };
 
